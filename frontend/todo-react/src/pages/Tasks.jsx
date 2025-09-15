@@ -4,26 +4,33 @@ import { fetchTasks, addTask, toggleTask, deleteTask } from "../api";
 export default function Tasks({ token }) {
   const [tasks, setTasks] = useState([]);
   const [newTitle, setNewTitle] = useState("");
+  const [loading, setLoading] = useState(false);
 
   async function loadTasks() {
+    if (!token) return;
+    setLoading(true);
     const data = await fetchTasks(token);
-    setTasks(data);
+    setTasks(Array.isArray(data) ? data : []);
+    setLoading(false);
   }
 
-  useEffect(() => {
-    if (token) loadTasks();
-  }, [token]);
+  useEffect(() => { loadTasks(); }, [token]);
 
   async function handleAdd(e) {
     e.preventDefault();
-    if (!newTitle) return;
-    await addTask(token, newTitle);
+    if (!newTitle.trim()) return;
+    await addTask(token, newTitle.trim());
     setNewTitle("");
     loadTasks();
   }
 
-  async function handleToggle(id) {
-    await toggleTask(token, id);
+  async function handleToggle(id, done) {
+    // نستعمل PATCH اللي عندك فـ API (بدّل إذا كتستعمل toggle endpoint)
+    await fetch(`http://127.0.0.1:8000/api/tasks/${id}/`, {
+      method: "PATCH",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ done: !done }),
+    });
     loadTasks();
   }
 
@@ -32,24 +39,45 @@ export default function Tasks({ token }) {
     loadTasks();
   }
 
-  if (!token) return <p>Please login first</p>;
+  if (!token) return <p className="empty">Please login to see your tasks.</p>;
+  if (loading) return <p className="empty">Loading…</p>;
 
   return (
-    <div>
-      <h2>Tasks</h2>
-      <form onSubmit={handleAdd}>
-        <input value={newTitle} onChange={e => setNewTitle(e.target.value)} placeholder="New task..." />
-        <button type="submit">Add</button>
+    <>
+      <form onSubmit={handleAdd} className="toolbar" style={{marginBottom:16}}>
+        <input className="input" value={newTitle} onChange={e => setNewTitle(e.target.value)} placeholder="Add a new task…" />
+        <button className="btn" type="submit">Add</button>
       </form>
-      <ul>
-        {tasks.map(t => (
-          <li key={t.id}>
-            <span style={{ textDecoration: t.done ? "line-through" : "none" }}>{t.title}</span>
-            <button onClick={() => handleToggle(t.id)}>Toggle</button>
-            <button onClick={() => handleDelete(t.id)}>Delete</button>
-          </li>
-        ))}
-      </ul>
-    </div>
+
+      {tasks.length === 0 ? (
+        <div className="empty">
+          No tasks yet. Add your first task 👇
+        </div>
+      ) : (
+        <ul className="list">
+          {tasks.map(t => (
+            <li key={t.id} className="item">
+              <button
+                className={`checkbox ${t.done ? 'done' : ''}`}
+                onClick={() => handleToggle(t.id, t.done)}
+                aria-label="toggle task"
+                title="Toggle"
+              >
+                {t.done ? '✓' : ''}
+              </button>
+
+              <div className={`title ${t.done ? 'done' : ''}`}>{t.title}</div>
+
+              <div className="actions">
+                <button className="btn ghost" onClick={() => handleToggle(t.id, t.done)}>
+                  {t.done ? 'Undo' : 'Done'}
+                </button>
+                <button className="btn danger" onClick={() => handleDelete(t.id)}>Delete</button>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </>
   );
 }
